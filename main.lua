@@ -1,142 +1,152 @@
--- HATA YAKALAMA SİSTEMİ
-local P=game:GetService("Players").LocalPlayer
-local G=P:WaitForChild("PlayerGui")
-local L={}
+-- GIR Etkileşim Logger (Delta Android Özel)
+local P = game:GetService("Players").LocalPlayer
+local G = P:WaitForChild("PlayerGui")
+local W = game:GetService("Workspace")
+local L = {}
 
 local function add(m)
-    table.insert(L,os.date("%H:%M:%S").." "..m)
-    if #L>60 then table.remove(L,1) end
+    table.insert(L, os.date("%H:%M:%S") .. " " .. m)
+    if #L > 50 then table.remove(L, 1) end
 end
 
--- 1. UI'I EN BAŞTA OLUŞTURALIM Kİ HATA OLURSA EKRANDA GÖRELİM
-if G:FindFirstChild("LG2") then G.LG2:Destroy() end
-local sg=Instance.new("ScreenGui")
-sg.Name="LG2"; sg.ResetOnSpawn=false; sg.Parent=G
+-- GUI Oluşturma
+if G:FindFirstChild("GIR_LOGGER") then G.GIR_LOGGER:Destroy() end
+local sg = Instance.new("ScreenGui")
+sg.Name = "GIR_LOGGER"
+sg.ResetOnSpawn = false
+sg.Parent = G
 
-local f=Instance.new("Frame")
-f.Size=UDim2.new(0.92,0,0.65,0); f.Position=UDim2.new(0.04,0,0.17,0)
-f.BackgroundColor3=Color3.fromRGB(10,12,20); f.Active=true; f.Draggable=true; f.Parent=sg
-Instance.new("UICorner",f).CornerRadius=UDim.new(0,8)
+local f = Instance.new("Frame")
+f.Size = UDim2.new(0.9, 0, 0.6, 0)
+f.Position = Uim2.new(0.05, 0, 0.2, 0) -- UDim2 yazım hatası düzeltildi
+f.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+f.Active = true
+f.Draggable = true
+f.Parent = sg
+Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
 
-local t=Instance.new("TextLabel")
-t.Size=UDim2.new(1,0,0,22); t.Text="📋 LOGGER (Debug Modu)"
-t.TextColor3=Color3.fromRGB(255,220,80); t.BackgroundTransparency=1
-t.TextSize=12; t.Font=Enum.Font.GothamBold; t.Parent=f
+local t = Instance.new("TextLabel")
+t.Size = UDim2.new(1, 0, 0, 25)
+t.Text = "📋 ETKİLEŞİM LOGGER - Kopyalamak için kutuya dokun ve seç"
+t.TextColor3 = Color3.fromRGB(255, 220, 80)
+t.BackgroundTransparency = 1
+t.TextSize = 12
+t.Font = Enum.Font.GothamBold
+t.Parent = f
 
-local tb=Instance.new("TextBox")
-tb.Size=UDim2.new(0.95,0,1,-55); tb.Position=UDim2.new(0.025,0,0,28)
-tb.BackgroundColor3=Color3.fromRGB(18,20,30)
-tb.TextColor3=Color3.fromRGB(140,255,140)
-tb.TextSize=9; tb.Font=Enum.Font.Code
-tb.TextXAlignment=Enum.TextXAlignment.Left; tb.TextYAlignment=Enum.TextYAlignment.Top
-tb.MultiLine=true; tb.TextWrapped=true
-tb.ClearTextOnFocus=false; tb.Selectable=true; tb.Active=true
-tb.Text="UI Yuklendi. Hook kuruluyor..."; tb.Parent=f
-Instance.new("UICorner",tb).CornerRadius=UDim.new(0,6)
+-- Kopyalanabilir Log Kutusu
+local tb = Instance.new("TextBox")
+tb.Size = UDim2.new(0.95, 0, 1, -60)
+tb.Position = UDim2.new(0.025, 0, 0, 30)
+tb.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+tb.TextColor3 = Color3.fromRGB(0, 255, 150)
+tb.TextSize = 11
+tb.Font = Enum.Font.Code
+tb.TextXAlignment = Enum.TextXAlignment.Left
+tb.TextYAlignment = Enum.TextYAlignment.Top
+tb.MultiLine = true
+tb.TextWrapped = true
+tb.ClearTextOnFocus = false
+tb.Selectable = true
+tb.Active = true
+tb.Text = "Hazır. Oyunda Plant/Harvest/Sell yap...\n(Logları kopyalamak için kutuya dokunup basılı tutun)"
+tb.Parent = f
+Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 6)
 
-local xb=Instance.new("TextButton")
-xb.Size=UDim2.new(0,30,0,30); xb.Position=UDim2.new(1,-34,0,-34)
-xb.Text="✕"; xb.TextSize=16; xb.TextColor3=Color3.new(1,1,1)
-xb.BackgroundColor3=Color3.fromRGB(180,40,40); xb.Parent=sg
-Instance.new("UICorner",xb).CornerRadius=UDim.new(1,0)
-xb.MouseButton1Click:Connect(function() sg:Destroy() end)
+-- Temizle Butonu
+local cb = Instance.new("TextButton")
+cb.Size = UDim2.new(0.95, 0, 0, 25)
+cb.Position = UDim2.new(0.025, 0, 1, -30)
+cb.Text = "🗑 LOGLARI TEMİZLE"
+cb.TextSize = 12
+cb.TextColor3 = Color3.new(1, 1, 1)
+cb.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+cb.Parent = f
+Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 6)
+cb.MouseButton1Click:Connect(function()
+    L = {}
+    tb.Text = "Loglar temizlendi. Yeni işlemler bekleniyor..."
+end)
 
-local cb=Instance.new("TextButton")
-cb.Size=UDim2.new(0,30,0,30); cb.Position=UDim2.new(1,-68,0,-34)
-cb.Text="🗑"; cb.TextSize=14; cb.TextColor3=Color3.new(1,1,1)
-cb.BackgroundColor3=Color3.fromRGB(80,80,80); cb.Parent=sg
-Instance.new("UICorner",cb).CornerRadius=UDim.new(1,0)
-cb.MouseButton1Click:Connect(function() L={} tb.Text="Temizlendi" end)
-
+-- Log Güncelleme Döngüsü
 task.spawn(function()
     while sg.Parent do
-        task.wait(1)
-        if #L>0 then tb.Text=table.concat(L,"\n") end
+        task.wait(0.5)
+        if #L > 0 then
+            tb.Text = table.concat(L, "\n")
+        end
     end
 end)
 
-add("Script basladi.")
-
--- 2. HOOKMETAMETHOD KISMI (pcall içine alındı)
-local REMOTE_OK={PlantSeed=true,HarvestCrop=true,BuySeed=true,BuySeedRequest=true,SellToCustomer=true,DepositCrop=true,CropSpeedup=true,PlaytimeClaim=true,DailyClaim=true,QuestClaim=true,QuestComplete=true,RedeemCode=true,PlaytimeReward=true,RebirthRequest=true,RebirthBuyUpgrade=true,RebirthBuyItem=true,BuyUpgrade=true,BuyStructure=true,PlaceBed=true,PlaceSellTable=true,PlaceTotem=true,PlaceItemButton=true,PickUpItem=true,PickUpCropFromSlot=true,OpenCrateCash=true,RequestEggPurchase=true,EggResult=true,GiftClaim=true,GiftSend=true,SocialClaimRequest=true,UnlockForbiddenShop=true,InstantRestock=true,InstantRestockForbidden=true,RushCustomer=true,CustomerDecision=true,CustomerOffer=true,RequestSteal=true,TrashHeld=true,PlaceEgg=true,PlacePet=true,PlaceDecoration=true,PlaceCrate=true,SetSignMessage=true,UnlockUfoZone=true,ObbyHammerHit=true,TutorialGrowTap=true,GearEquipSync=true,StealAlarm=true,StealAlert=true}
-local REMOTE_SKIP={PlaySound=true,Notify=true,ChatTip=true,EventFX=true,SprintSet=true,TutorialState=true,TutorialSkip=true,SaveSetting=true,GetSettings=true,CropRecordsUpdated=true,GetCropRecords=true,PetDiscoveryUpdated=true,GetPetDiscovery=true,SocialState=true,DailyState=true,RebirthState=true,PlaytimeUpdated=true,GiftMailPush=true,GiftAlert=true,SetGiftIntent=true,GiftGetTargets=true,GiftGetInbox=true,SocialClaimResult=true,EggResultMulti=true,CrateResult=true,UfoTeleportFX=true,AdminAbuseBanner=true,AdminRestock=true,AdminAddStock=true,DebugGiveCrop=true,DebugDeposit=true,CustomerOfferClear=true,PetPickupTip=true,Teleport=true}
-
-if not hookmetamethod then
-    add("HATA: Delta hookmetamethod desteklemiyor!")
-else
-    local ok, err = pcall(function()
-        local IN_HOOK = false
-        local old
-        old = hookmetamethod(game, "__namecall", function(self, ...)
-            if IN_HOOK then return old(self, ...) end
-            
-            local method = ""
-            pcall(function() method = getnamecallmethod() end)
-            
-            if method == "FireServer" or method == "InvokeServer" then
-                if typeof(self) == "Instance" then
-                    local cn = self.ClassName
-                    if cn == "RemoteEvent" or cn == "RemoteFunction" then
-                        IN_HOOK = true
-                        pcall(function()
-                            local n = self.Name
-                            if REMOTE_OK[n] and not REMOTE_SKIP[n] then
-                                local a = {...}
-                                local s = ""
-                                for i,v in pairs(a) do
-                                    if typeof(v)=="table" then
-                                        s=s.."["..i.."]={"
-                                        for k,val in pairs(v) do s=s..tostring(k).."="..tostring(val).."," end
-                                        s=s.."} "
-                                    elseif typeof(v)=="Instance" then
-                                        s=s.."["..i.."]"..tostring(v.Name).."(Inst) "
-                                    else
-                                        s=s.."["..i.."]"..tostring(v).."("..typeof(v)..") "
-                                    end
-                                end
-                                add("R|"..n.."|"..method.."|"..s)
-                            end
-                        end)
-                        IN_HOOK = false
+-- 1. REMOTE EVENT SPY (Güvenli pcall ve reentry koruması ile)
+local IN_HOOK = false
+local ok, err = pcall(function()
+    local old
+    old = hookmetamethod(game, "__namecall", function(self, ...)
+        if IN_HOOK then return old(self, ...) end
+        
+        local method = ""
+        pcall(function() method = getnamecallmethod() end)
+        
+        if method == "FireServer" then
+            if typeof(self) == "Instance" and (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction") then
+                IN_HOOK = true
+                pcall(function()
+                    local rName = self.Name
+                    local args = {...}
+                    local s = ""
+                    for i, v in pairs(args) do
+                        if typeof(v) == "Instance" then
+                            s = s .. "[" .. i .. "] " .. tostring(v.Name) .. " (Obje) | "
+                        elseif typeof(v) == "table" then
+                            s = s .. "[" .. i .. "] Tablo | "
+                        else
+                            s = s .. "[" .. i .. "] " .. tostring(v) .. " (" .. typeof(v) .. ") | "
+                        end
                     end
-                end
+                    add("[REMOTE] " .. rName .. " | Args: " .. s)
+                end)
+                IN_HOOK = false
             end
-            return old(self, ...)
-        end)
-        add("Hookmetamethod basariyla kuruldu.")
+        end
+        return old(self, ...)
     end)
-    
-    if not ok then
-        add("HOOK HATASI: "..tostring(err))
-    end
+end)
+
+if ok then
+    add("[SİSTEM] Remote Logger aktif edildi.")
+else
+    add("[HATA] Remote Logger kurulamadı: " .. tostring(err))
 end
 
--- 3. UI TARAMA
+-- 2. PROXIMITY PROMPT LOGGER (E tuşu ile yapılan etkileşimler)
 task.spawn(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(2)
-    pcall(function()
-        local function hookBtn(obj)
-            obj.MouseButton1Click:Connect(function()
-                local n = obj.Name
-                if n~="Handle" and n~="Dim" and n~="Backdrop" then
-                    local txt = (obj.ClassName=="TextButton") and obj.Text or "img"
-                    add("UI|"..n.."|'"..txt.."'")
+    task.wait(1)
+    
+    local function hookPP(pp)
+        pcall(function()
+            pp.Triggered:Connect(function(player)
+                if player == P then
+                    local actText = pp.ActionText
+                    if actText == "" then actText = pp.ObjectText end
+                    add("[E-TUŞU] " .. tostring(actText) .. " (Parent: " .. tostring(pp.Parent.Name) .. ")")
                 end
             end)
-        end
-
-        for _,obj in ipairs(G:GetDescendants()) do
-            if obj.ClassName=="TextButton" or obj.ClassName=="ImageButton" then
-                hookBtn(obj)
-            end
-        end
-
-        G.DescendantAdded:Connect(function(obj)
-            if obj.ClassName=="TextButton" or obj.ClassName=="ImageButton" then
-                task.wait(0.2)
-                hookBtn(obj)
-            end
         end)
+    end
+
+    for _, obj in ipairs(W:GetDescendants()) do
+        if obj.ClassName == "ProximityPrompt" then
+            hookPP(obj)
+        end
+    end
+
+    W.DescendantAdded:Connect(function(obj)
+        if obj.ClassName == "ProximityPrompt" then
+            task.wait(0.1)
+            hookPP(obj)
+        end
     end)
+    add("[SİSTEM] ProximityPrompt (E Tuşu) Logger aktif edildi.")
 end)

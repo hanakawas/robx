@@ -1,159 +1,122 @@
--- Grow It RNG - Kontrollü (Rastgele tıklama YOK)
-local P=game:GetService("Players").LocalPlayer
-local G=P:WaitForChild("PlayerGui")
-local W=game:GetService("Workspace")
-local VIM=game:GetService("VirtualInputManager")
+-- GIR Remote Logger (Rayfield UI)
+-- Once bunu calistir, sonra sifreli scripti calistir
 
--- SADECE KENDI PLOT'LARINI BUL
-local myPlots={}
-for _,obj in ipairs(W:GetDescendants()) do
-    if obj:IsA("Model") and obj.Name:find("Plot") then
-        -- Sadece oyuncunun plot'u (IsBasePlot kontrolü)
-        if obj:FindFirstChild("IsBasePlot") then
-            table.insert(myPlots,obj)
-        end
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "GIR Logger",
+    LoadingTitle = "Yukleniyor...",
+    LoadingSubtitle = "Remote Spy",
+    Theme = "Default",
+    KeySystem = false,
+})
+
+local Tab = Window:CreateTab("Log", 4483362458)
+local Tab2 = Window:CreateTab("Ayarlar", 4483362458)
+
+-- LOG DEPOLAMA
+local LOG = {}
+local logLabel
+
+local function addLog(msg)
+    table.insert(LOG, os.date("%H:%M:%S") .. " " .. msg)
+    if #LOG > 80 then table.remove(LOG, 1) end
+    if logLabel then
+        logLabel:Set(table.concat(LOG, "\n"))
     end
 end
 
--- BELIRLI SLOT'LARDA PROMPT BUL (rastgele degil)
-local function findPromptInMyPlots(actionText)
-    local found={}
-    for _,plot in ipairs(myPlots) do
-        for _,obj in ipairs(plot:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") and obj.ActionText==actionText then
-                table.insert(found,obj)
+-- RAYFIELD LOG LABEL
+logLabel = Tab:CreateLabel("Logger hazir. Sifreli scripti calistir...")
+
+-- COPY BUTONU
+Tab:CreateButton({
+    Name = "Logu Kopyala",
+    Callback = function()
+        pcall(function()
+            setclipboard(table.concat(LOG, "\n"))
+        end)
+        addLog("--- KOPYALANDI ---")
+    end
+})
+
+-- TEMIZLE
+Tab:CreateButton({
+    Name = "Logu Temizle",
+    Callback = function()
+        LOG = {}
+        if logLabel then logLabel:Set("Temizlendi.") end
+    end
+})
+
+-- AYARLAR
+local filterRemotes = true
+local filterPP = true
+
+Tab2:CreateToggle({
+    Name = "Remote Log",
+    CurrentValue = true,
+    Callback = function(v) filterRemotes = v end
+})
+
+Tab2:CreateToggle({
+    Name = "ProximityPrompt Log",
+    CurrentValue = true,
+    Callback = function(v) filterPP = v end
+})
+
+-- REMOTE SPY (hookmetamethod)
+local old
+old = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+
+    if filterRemotes and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
+        local a = ""
+        for i, v in ipairs(args) do
+            if typeof(v) == "table" then
+                a = a .. "[" .. i .. "]={"
+                for k, val in pairs(v) do
+                    a = a .. tostring(k) .. "=" .. tostring(val) .. ","
+                end
+                a = a .. "} "
+            elseif typeof(v) == "Instance" then
+                a = a .. "[" .. i .. "]" .. v:GetFullName() .. "(Instance) "
+            else
+                a = a .. "[" .. i .. "]" .. tostring(v) .. "(" .. typeof(v) .. ") "
             end
         end
+        addLog("R|" .. self.Name .. "|" .. method .. "|" .. a)
     end
-    return found
-end
 
--- SADECE BULUNANLARI ATESLE (hepsini degil)
-local function fireSpecific(actionText)
-    local prompts=findPromptInMyPlots(actionText)
-    local c=0
-    for _,pr in ipairs(prompts) do
-        pcall(function() fireproximityprompt(pr) end)
-        c=c+1
-        task.wait(0.15)
-    end
-    return c
-end
+    return old(self, ...)
+end)
 
--- UI BUTON (SellAll/GrowAll)
-local function tapUI(name)
-    for _,o in ipairs(G:GetDescendants()) do
-        if(o:IsA("TextButton")or o:IsA("ImageButton"))and o.Name==name and o.Visible then
-            local x=o.AbsolutePosition.X+o.AbsoluteSize.X/2
-            local y=o.AbsolutePosition.Y+o.AbsoluteSize.Y/2
-            VIM:SendMouseButtonEvent(x,y,0,true,game,0)
-            task.wait(.04)
-            VIM:SendMouseButtonEvent(x,y,0,false,game,0)
-            return true
+-- PROXIMITY PROMPT SPY
+pcall(function()
+    local oldPP
+    oldPP = hookfunction(fireproximityprompt, function(pp)
+        if filterPP then
+            addLog("PP|" .. pp.ActionText .. "|" .. pp.Parent.Name .. "|" .. pp:GetFullName())
         end
-    end
-    return false
-end
-
--- GUI
-if G:FindFirstChild("GIR2")then G.GIR2:Destroy()end
-local sg=Instance.new("ScreenGui")sg.Name="GIR2"sg.ResetOnSpawn=false sg.Parent=G
-
-local f=Instance.new("Frame")
-f.Size=UDim2.new(0,210,0,280)f.Position=UDim2.new(0.02,0,0.1,0)
-f.BackgroundColor3=Color3.fromRGB(15,17,25)f.Active=true f.Draggable=true f.Parent=sg
-Instance.new("UICorner",f).CornerRadius=UDim.new(0,10)
-
-local t=Instance.new("TextLabel")
-t.Size=UDim2.new(1,0,0,24)t.Text="🌱 GIR Kontrol (Plot:"..#myPlots..")"
-t.TextColor3=Color3.fromRGB(80,255,120)t.BackgroundTransparency=1
-t.TextSize=12;t.Font=Enum.Font.GothamBold;t.Parent=f
-
--- LOG
-local lb=Instance.new("TextLabel")
-lb.Size=UDim2.new(0.92,0,0,50)lb.Position=UDim2.new(0.04,0,0.06,0)
-lb.BackgroundTransparency=1 lb.TextColor3=Color3.fromRGB(200,255,200)
-lb.TextSize=9;lb.Font=Enum.Font.Code lb.TextWrapped=true
-lb.TextXAlignment=Enum.TextXAlignment.Left lb.Text="Hazir. Butonlara bas."
-lb.Parent=f
-
-local function log(msg)
-    lb.Text=os.date("%H:%M:%S").." "..msg
-end
-
--- BUTONLAR
-local function btn(txt,y,color)
-    local b=Instance.new("TextButton")
-    b.Size=UDim2.new(0.9,0,0,32)b.Position=UDim2.new(0.05,0,0,y)
-    b.Text=txt;b.TextSize=11;b.Font=Enum.Font.GothamBold
-    b.TextColor3=Color3.new(1,1,1)b.BackgroundColor3=color
-    b.Parent=f Instance.new("UICorner",b).CornerRadius=UDim.new(0,7)
-    return b
-end
-
--- PLANT (sadece kendi plot'larina)
-local bPlant=btn("🌱 PLANT (Kendi Plot)",0.16,Color3.fromRGB(35,120,55))
-bPlant.MouseButton1Click:Connect(function()
-    local c=fireSpecific("Plant")
-    log("Plant: "..c.." slot")
+        return oldPP(pp)
+    end)
 end)
 
--- HARVEST (sadece kendi plot'larina)
-local bHarvest=btn("🌾 HARVEST (Kendi Plot)",0.24,Color3.fromRGB(150,110,25))
-bHarvest.MouseButton1Click:Connect(function()
-    local c=fireSpecific("Harvest")
-    log("Harvest: "..c.." slot")
+-- CLICK DETECTOR SPY
+pcall(function()
+    local oldCD
+    oldCD = hookfunction(fireclickdetector, function(cd)
+        if filterPP then
+            addLog("CD|" .. cd.Parent.Name .. "|" .. cd:GetFullName())
+        end
+        return oldCD(cd)
+    end)
 end)
 
--- PICK UP CROP
-local bPick=btn("📦 PICK UP CROP",0.32,Color3.fromRGB(100,80,140))
-bPick.MouseButton1Click:Connect(function()
-    local c=fireSpecific("Pick Up Crop")
-    log("PickUp: "..c)
-end)
-
--- PLACE CROP
-local bPlace=btn("📤 PLACE CROP",0.40,Color3.fromRGB(80,100,140))
-bPlace.MouseButton1Click:Connect(function()
-    local c=fireSpecific("Place Crop")
-    log("Place: "..c)
-end)
-
--- GROW ALL (UI butonu)
-local bGrow=btn("⬆️ GROW ALL",0.48,Color3.fromRGB(60,60,130))
-bGrow.MouseButton1Click:Connect(function()
-    tapUI("Growallcropsbutton")
-    log("GrowAll basildi")
-end)
-
--- SELL ALL (UI butonu)
-local bSell=btn("💰 SELL ALL",0.56,Color3.fromRGB(45,90,150))
-bSell.MouseButton1Click:Connect(function()
-    tapUI("Sellallcropsbutton")
-    log("SellAll basildi")
-end)
-
--- KOMBOLAR
-local bCombo=btn("🔄 HARVEST+SELL+PLANT+GROW",0.66,Color3.fromRGB(130,60,100))
-bCombo.MouseButton1Click:Connect(function()
-    log("Kombo basladi...")
-    fireSpecific("Harvest")
-    task.wait(0.3)
-    fireSpecific("Pick Up Crop")
-    task.wait(0.3)
-    fireSpecific("Place Crop")
-    task.wait(0.3)
-    tapUI("Sellallcropsbutton")
-    task.wait(0.5)
-    fireSpecific("Plant")
-    task.wait(0.3)
-    tapUI("Growallcropsbutton")
-    log("Kombo bitti ✅")
-end)
-
--- KAPAT
-local bX=btn("✕ KAPAT",0.76,Color3.fromRGB(160,40,40))
-bX.MouseButton1Click:Connect(function() sg:Destroy() end)
-
-log("Yuklendi. Plot:"..#myPlots.." | Manuel mod")
-print("GIR2 OK - Manuel mod, rastgele tiklama YOK")
+addLog("Logger AKTIF. Sifreli scripti calistir.")
+Rayfield:Notify({
+    Title = "Logger Hazir",
+    Content = "Simdi sifreli scripti calistir. Her sey loglanacak.",
+    Duration = 5,
+})

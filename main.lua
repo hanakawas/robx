@@ -1,152 +1,519 @@
--- GIR Etkileşim Logger (Delta Android Özel)
-local P = game:GetService("Players").LocalPlayer
-local G = P:WaitForChild("PlayerGui")
-local W = game:GetService("Workspace")
-local L = {}
+--[[
+  Universal Interaction Logger - Rayfield UI
+  Delta Executor 2.729.840+ | Mobil (Android/iOS)
+  
+  Özellikler:
+  - Karakter dokunma olayları (Touched)
+  - Araç kullanımı ve backpack değişiklikleri
+  - Sağlık/ölüm/canlanma logu
+  - Hareket hızı ve pozisyon takibi
+  - Workspace objeleri ile etkileşim
+  - Otomatik log kayıt sistemi
+  
+  Kullanım: loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+]]
 
-local function add(m)
-    table.insert(L, os.date("%H:%M:%S") .. " " .. m)
-    if #L > 50 then table.remove(L, 1) end
-end
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- GUI Oluşturma
-if G:FindFirstChild("GIR_LOGGER") then G.GIR_LOGGER:Destroy() end
-local sg = Instance.new("ScreenGui")
-sg.Name = "GIR_LOGGER"
-sg.ResetOnSpawn = false
-sg.Parent = G
+-- === KONFİGÜRASYON ===
+local Config = {
+    LogTouch = true,           -- Dokunma logu
+    LogTools = true,           -- Araç logu
+    LogHealth = true,          -- Sağlık logu
+    LogMovement = true,        -- Hareket logu
+    LogDeath = true,           -- Ölüm logu
+    LogPosition = true,        -- Pozisyon logu
+    LogWorkspace = true,       -- Workspace objeleri
+    MaxLogLines = 100,         -- Maksimum log satırı
+    SaveLogs = false,          -- Logları kaydet (test edin)
+}
 
-local f = Instance.new("Frame")
-f.Size = UDim2.new(0.9, 0, 0.6, 0)
-f.Position = Uim2.new(0.05, 0, 0.2, 0) -- UDim2 yazım hatası düzeltildi
-f.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-f.Active = true
-f.Draggable = true
-f.Parent = sg
-Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
+-- === VERİ YAPILARI ===
+local LogHistory = {}
+local TouchConnections = {}
+local LoggedParts = {}
 
-local t = Instance.new("TextLabel")
-t.Size = UDim2.new(1, 0, 0, 25)
-t.Text = "📋 ETKİLEŞİM LOGGER - Kopyalamak için kutuya dokun ve seç"
-t.TextColor3 = Color3.fromRGB(255, 220, 80)
-t.BackgroundTransparency = 1
-t.TextSize = 12
-t.Font = Enum.Font.GothamBold
-t.Parent = f
+-- === RAYFIELD ARAYÜZ ===
+local Window = Rayfield:CreateWindow({
+    Name = "Universal Logger",
+    LoadingTitle = "Interaction Logger",
+    LoadingSubtitle = "Universal - Any Game",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "UniversalLogger",
+        FileName = "Config"
+    },
+    KeySystem = false,
+})
 
--- Kopyalanabilir Log Kutusu
-local tb = Instance.new("TextBox")
-tb.Size = UDim2.new(0.95, 0, 1, -60)
-tb.Position = UDim2.new(0.025, 0, 0, 30)
-tb.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-tb.TextColor3 = Color3.fromRGB(0, 255, 150)
-tb.TextSize = 11
-tb.Font = Enum.Font.Code
-tb.TextXAlignment = Enum.TextXAlignment.Left
-tb.TextYAlignment = Enum.TextYAlignment.Top
-tb.MultiLine = true
-tb.TextWrapped = true
-tb.ClearTextOnFocus = false
-tb.Selectable = true
-tb.Active = true
-tb.Text = "Hazır. Oyunda Plant/Harvest/Sell yap...\n(Logları kopyalamak için kutuya dokunup basılı tutun)"
-tb.Parent = f
-Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 6)
+-- Sekme
+local Tab = Window:CreateTab("LOG", 4483362458)
+local Tab2 = Window:CreateTab("AYARLAR", 4483362458)
+local Tab3 = Window:CreateTab("OTOMASYON", 4483362458)
 
--- Temizle Butonu
-local cb = Instance.new("TextButton")
-cb.Size = UDim2.new(0.95, 0, 0, 25)
-cb.Position = UDim2.new(0.025, 0, 1, -30)
-cb.Text = "🗑 LOGLARI TEMİZLE"
-cb.TextSize = 12
-cb.TextColor3 = Color3.new(1, 1, 1)
-cb.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-cb.Parent = f
-Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 6)
-cb.MouseButton1Click:Connect(function()
-    L = {}
-    tb.Text = "Loglar temizlendi. Yeni işlemler bekleniyor..."
-end)
+-- === LOG YÖNETİMİ ===
 
--- Log Güncelleme Döngüsü
-task.spawn(function()
-    while sg.Parent do
-        task.wait(0.5)
-        if #L > 0 then
-            tb.Text = table.concat(L, "\n")
-        end
-    end
-end)
-
--- 1. REMOTE EVENT SPY (Güvenli pcall ve reentry koruması ile)
-local IN_HOOK = false
-local ok, err = pcall(function()
-    local old
-    old = hookmetamethod(game, "__namecall", function(self, ...)
-        if IN_HOOK then return old(self, ...) end
-        
-        local method = ""
-        pcall(function() method = getnamecallmethod() end)
-        
-        if method == "FireServer" then
-            if typeof(self) == "Instance" and (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction") then
-                IN_HOOK = true
-                pcall(function()
-                    local rName = self.Name
-                    local args = {...}
-                    local s = ""
-                    for i, v in pairs(args) do
-                        if typeof(v) == "Instance" then
-                            s = s .. "[" .. i .. "] " .. tostring(v.Name) .. " (Obje) | "
-                        elseif typeof(v) == "table" then
-                            s = s .. "[" .. i .. "] Tablo | "
-                        else
-                            s = s .. "[" .. i .. "] " .. tostring(v) .. " (" .. typeof(v) .. ") | "
-                        end
-                    end
-                    add("[REMOTE] " .. rName .. " | Args: " .. s)
-                end)
-                IN_HOOK = false
-            end
-        end
-        return old(self, ...)
-    end)
-end)
-
-if ok then
-    add("[SİSTEM] Remote Logger aktif edildi.")
-else
-    add("[HATA] Remote Logger kurulamadı: " .. tostring(err))
-end
-
--- 2. PROXIMITY PROMPT LOGGER (E tuşu ile yapılan etkileşimler)
-task.spawn(function()
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    task.wait(1)
+-- Log ekle
+local function AddLog(Type, Message, Details)
+    local entry = {
+        Type = Type,
+        Message = Message,
+        Details = Details or "",
+        Time = tick(),
+        Index = #LogHistory + 1
+    }
+    table.insert(LogHistory, entry)
     
-    local function hookPP(pp)
-        pcall(function()
-            pp.Triggered:Connect(function(player)
-                if player == P then
-                    local actText = pp.ActionText
-                    if actText == "" then actText = pp.ObjectText end
-                    add("[E-TUŞU] " .. tostring(actText) .. " (Parent: " .. tostring(pp.Parent.Name) .. ")")
-                end
-            end)
-        end)
+    -- Maksimum satır sınır
+    while #LogHistory > Config.MaxLogLines do
+        table.remove(LogHistory, 1)
     end
+    
+    -- Rayfield bildirimi
+    Rayfield:Notify({
+        Title = Type,
+        Content = Message .. (Details and (" - " .. Details) or ""),
+        Duration = 5,
+        Image = 4483362458,
+        Actions = {
+            Ignore = {
+                Name = "Tamam",
+                Callback = function() end
+            }
+        }
+    })
+end
 
-    for _, obj in ipairs(W:GetDescendants()) do
-        if obj.ClassName == "ProximityPrompt" then
-            hookPP(obj)
+-- Log penceresini güncelle
+local function RefreshLogDisplay()
+    local display = Tab:CreateLabel("Henüz log yok")
+    
+    -- Önceki label'leri temizle
+    for _, child in pairs(Tab:GetChildren()) do
+        if child:IsA("TextLabel") and child.Name == "LogDisplay" then
+            child:Destroy()
         end
     end
+    
+    local LogDisplay = Tab:CreateLabel("")
+    LogDisplay.Name = "LogDisplay"
+    LogDisplay:Set("")
+    
+    -- Son 20 logu göster
+    local lines = ""
+    local count = 0
+    for i = #LogHistory, 1, -1 do
+        local entry = LogHistory[i]
+        if count < 20 then
+            local t = os.date("%H:%M:%S", entry.Time)
+            local color = ""
+            if entry.Type == "DOKUNMA" then color = "[DOKUNMA]"
+            elseif entry.Type == "ARAC" then color = "[ARAC]"
+            elseif entry.Type == "SAĞLIK" then color = "[SAĞLIK]"
+            elseif entry.Type == "ÖLÜM" then color = "[ÖLÜM]"
+            elseif entry.Type == "HAREKET" then color = "[HAREKET]"
+            else color = "[INFO]" end
+            lines = lines .. "[" .. t .. "] " .. color .. " " .. entry.Message .. "\n"
+            count = count + 1
+        end
+    end
+    
+    if lines == "" then
+        LogDisplay:Set("Henüz kaydedilen olay yok.")
+    else
+        LogDisplay:Set(lines)
+    end
+end
 
-    W.DescendantAdded:Connect(function(obj)
-        if obj.ClassName == "ProximityPrompt" then
-            task.wait(0.1)
-            hookPP(obj)
+-- Logu temizle
+local function ClearLogs()
+    LogHistory = {}
+    LoggedParts = {}
+    RefreshLogDisplay()
+    AddLog("SİSTEM", "Loglar temizlendi", "")
+end
+
+-- Logu kaydet (dosya)
+local function SaveLogsToFile()
+    if not Config.SaveLogs then
+        AddLog("SİSTEM", "Log kayıt kapalı", "Ayarlardan açabilirsiniz")
+        return
+    end
+    
+    local content = ""
+    for i, entry in ipairs(LogHistory) do
+        local t = os.date("%Y-%m-%d %H:%M:%S", entry.Time)
+        content = content .. "[" .. t .. "] [" .. entry.Type .. "] " .. entry.Message ..
+                  (entry.Details and " - " .. entry.Details or "") .. "\n"
+    end
+    
+    -- Not: Dosya yazımı oyunda kısıtlı olabilir
+    AddLog("SİSTEM", "Loglar hazırlandı", string.format("Toplam %d kayıt", #LogHistory))
+end
+
+-- === OLAY TESPİTİ ===
+
+-- 1. Karakter dokunma olayları (Touched)
+local function SetupTouchLogging()
+    if not Config.LogTouch then return end
+    
+    local character = game.Players.LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:WaitForChild("Humanoid")
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    
+    -- Her parça için touched olayı
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Touched:Connect(function(hit)
+                if not Config.LogTouch then return end
+                
+                local hitPart = hit
+                local hitParent = hit.Parent
+                local hitName = hitPart.Name
+                
+                -- Hangi objeye dokunduğunu bul
+                local objName = "Bilinmeyen Obje"
+                local objType = "Parça"
+                
+                -- Workspace'deki bir obje mi?
+                if workspace:FindFirstChild(hitName) then
+                    objName = hitName
+                    objType = "Workspace"
+                elseif workspace:FindFirstChild(hitParent.Name) then
+                    objName = hitParent.Name
+                    objType = "Workspace (Model)"
+                else
+                    -- Objenin adını bul
+                    local current = hitParent
+                    for _ = 1, 5 do
+                        if current.Name ~= "Workspace" and current.Name ~= "Players" then
+                            objName = current.Name
+                            break
+                        end
+                        current = current.Parent
+                    end
+                end
+                
+                -- Eğer daha önce loglanmış parça
+                local partKey = hitPart:GetDebugId()
+                if LoggedParts[partKey] then
+                    return -- Çok sık loglama
+                end
+                LoggedParts[partKey] = true
+                
+                AddLog("DOKUNMA",
+                    "Oyun bloğuna dokundu",
+                    string.format("Obje: %s | Tip: %s | Parça: %s",
+                        objName, objType, hitName)
+                )
+                
+                -- 5 saniye sonra tekrar loglama
+                task.delay(5, function()
+                    LoggedParts[partKey] = nil
+                end)
+            end)
+        end
+    end
+end
+
+-- 2. Araç etkileşimleri
+local function SetupToolLogging()
+    if not Config.LogTools then return end
+    
+    local player = game.Players.LocalPlayer
+    local backpack = player:WaitForChild("Backpack")
+    
+    -- Araç eklendi
+    backpack.ChildAdded:Connect(function(tool)
+        if tool:IsA("Tool") then
+            AddLog("ARAC",
+                "Eline alındı",
+                string.format("Araç: %s", tool.Name)
+            )
         end
     end)
-    add("[SİSTEM] ProximityPrompt (E Tuşu) Logger aktif edildi.")
+    
+    -- Araç çıkarıldı
+    backpack.ChildRemoving:Connect(function(tool)
+        if tool:IsA("Tool") then
+            AddLog("ARAC",
+                "Elinizden bırakıldı",
+                string.format("Araç: %s", tool.Name)
+            )
+        end
+    end)
+    
+    -- Araç kullanıma alındı (character'e verildi)
+    player.CharacterAdded:Connect(function(character)
+        character.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then
+                AddLog("ARAC",
+                    "Karaktere verildi",
+                    string.format("Araç: %s", child.Name)
+                )
+            end
+        end)
+    end)
+end
+
+-- 3. Sağlık ve ölüm logu
+local function SetupHealthLogging()
+    if not Config.LogHealth then return end
+    
+    local player = game.Players.LocalPlayer
+    local humanoid = player.Character and player.Character:WaitForChild("Humanoid")
+    
+    if not humanoid then return end
+    
+    humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+        if humanoid.Health <= 0 then
+            AddLog("ÖLÜM",
+                "Karakter öldü",
+                string.format("Sağlık: %d/%d", humanoid.Health, humanoid.MaxHealth)
+            )
+        elseif humanoid.Health < humanoid.MaxHealth * 0.5 then
+            AddLog("SAĞLIK",
+                "Sağlık azaldı",
+                string.format("%d/%d (%d%%)", humanoid.Health, humanoid.MaxHealth,
+                    math.floor(humanoid.Health / humanoid.MaxHealth * 100))
+            )
+        end
+    end)
+    
+    -- Canlanma (CharacterAdded)
+    player.CharacterAdded:Connect(function(character)
+        task.wait(1) -- Karakter yüklensin
+        local hum = character:FindFirstChild("Humanoid")
+        if hum then
+            AddLog("DOĞA",
+                "Karakter canlandı",
+                string.format("Sağlık: %d/%d", hum.Health, hum.MaxHealth)
+            )
+        end
+    end)
+end
+
+-- 4. Hareket ve pozisyon takibi
+local function SetupMovementLogging()
+    if not Config.LogMovement then return end
+    
+    local player = game.Players.LocalPlayer
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not hrp then return end
+    
+    task.spawn(function()
+        while Config.LogMovement and task.wait(3) do
+            local speed = hrp.AssemblyLinearVelocity.Magnitude
+            local pos = hrp.Position
+            local lookVector = hrp.CFrame.LookVector
+            
+            AddLog("HAREKET",
+                "Hareket algılandı",
+                string.format("Hız: %.1f stud/s | Pozisyon: %.1f, %.1f, %.1f",
+                    speed, pos.X, pos.Y, pos.Z)
+            )
+        end
+    end)
+end
+
+-- 5. Workspace objelerini tarar
+local function SetupWorkspaceLogging()
+    if not Config.LogWorkspace then return end
+    
+    task.spawn(function()
+        while Config.LogWorkspace and task.wait(10) do
+            local parts = 0
+            local models = 0
+            local tools = 0
+            
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    parts = parts + 1
+                elseif obj:IsA("Model") then
+                    models = models + 1
+                elseif obj:IsA("Tool") then
+                    tools = tools + 1
+                end
+            end
+            
+            AddLog("WORKSPACE",
+                "Oyun dünyası tarandı",
+                string.format("Parça: %d | Model: %d | Araç: %d", parts, models, tools)
+            )
+        end
+    end)
+end
+
+-- === AYARLAR TAB'I ===
+
+-- Ayarlar
+local ToggleTouch = Tab2:CreateToggle({
+    Name = "Dokunma Logu",
+    Flag = "TouchLog",
+    Default = true,
+    Callback = function(v)
+        Config.LogTouch = v
+        if not v then
+            LoggedParts = {}
+        end
+        AddLog("AYAR", "Dokunma logu: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local ToggleTools = Tab2:CreateToggle({
+    Name = "Araç Logu",
+    Flag = "ToolLog",
+    Default = true,
+    Callback = function(v)
+        Config.LogTools = v
+        AddLog("AYAR", "Araç logu: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local ToggleHealth = Tab2:CreateToggle({
+    Name = "Sağlık/Ölüm Logu",
+    Flag = "HealthLog",
+    Default = true,
+    Callback = function(v)
+        Config.LogHealth = v
+        AddLog("AYAR", "Sağlık logu: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local ToggleMovement = Tab2:CreateToggle({
+    Name = "Hareket Logu",
+    Flag = "MovementLog",
+    Default = true,
+    Callback = function(v)
+        Config.LogMovement = v
+        AddLog("AYAR", "Hareket logu: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local TogglePosition = Tab2:CreateToggle({
+    Name = "Pozisyon Logu",
+    Flag = "PositionLog",
+    Default = false,
+    Callback = function(v)
+        Config.LogPosition = v
+        AddLog("AYAR", "Pozisyon logu: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local ToggleWorkspace = Tab2:CreateToggle({
+    Name = "Workspace Taraması",
+    Flag = "WorkspaceLog",
+    Default = false,
+    Callback = function(v)
+        Config.LogWorkspace = v
+        AddLog("AYAR", "Workspace taraması: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local SaveLogsToggle = Tab2:CreateToggle({
+    Name = "Logları Kaydet",
+    Flag = "SaveLogs",
+    Default = false,
+    Callback = function(v)
+        Config.SaveLogs = v
+        AddLog("AYAR", "Log kayıt: " .. (v and "AÇIK" or "KAPALI"), "")
+    end,
+})
+
+local MaxLogLinesInput = Tab2:CreateTextbox({
+    Name = "Maksimum Log Satırı",
+    Default = "100",
+    Flag = "MaxLogLines",
+    Callback = function(text)
+        local num = tonumber(text) or 100
+        Config.MaxLogLines = num
+        AddLog("AYAR", string.format("Maksimum log satırı: %d", num), "")
+    end,
+})
+
+-- === OTOMASYON TAB'I ===
+
+-- Log penceresi
+local LogDisplay = Tab:CreateLabel("Henüz log yok")
+
+-- Logu yenile
+local RefreshButton = Tab:CreateButton({
+    Name = "Logu Yenile",
+    Callback = function()
+        RefreshLogDisplay()
+    end,
+})
+
+-- Logu temizle
+local ClearButton = Tab:CreateButton({
+    Name = "Logu Temizle",
+    Callback = function()
+        ClearLogs()
+    end,
+})
+
+-- Logu kaydet
+local SaveButton = Tab:CreateButton({
+    Name = "Logları Kaydet",
+    Callback = function()
+        SaveLogsToFile()
+    end,
+})
+
+-- Log detayı
+local LogDetails = Tab:CreateLabel("")
+local DetailButton = Tab:CreateButton({
+    Name = "Son Log Detayı",
+    Callback = function()
+        if #LogHistory > 0 then
+            local last = LogHistory[#LogHistory]
+            LogDetails:Set(string.format(
+                "Tip: %s\nMesaj: %s\nDetay: %s\nZaman: %s\n",
+                last.Type, last.Message, last.Details,
+                os.date("%Y-%m-%d %H:%M:%S", last.Time)
+            ))
+        else
+            LogDetails:Set("Log yok")
+        end
+    end,
+})
+
+-- Log istatistiği
+local StatsLabel = Tab:CreateLabel("")
+local StatsButton = Tab:CreateButton({
+    Name = "Log İstatistiği",
+    Callback = function()
+        local stats = {}
+        for _, entry in ipairs(LogHistory) do
+            stats[entry.Type] = (stats[entry.Type] or 0) + 1
+        end
+        local text = ""
+        for type, count in pairs(stats) do
+            text = text .. type .. ": " .. count .. "\n"
+        end
+        StatsLabel:Set(text)
+    end,
+})
+
+-- === OLAY KURULUMU ===
+SetupTouchLogging()
+SetupToolLogging()
+SetupHealthLogging()
+SetupMovementLogging()
+SetupWorkspaceLogging()
+
+-- İlk yükleme
+RefreshLogDisplay()
+AddLog("SİSTEM", "Universal Interaction Logger yüklendi",
+    string.format("Oyun: %s", game:GetService("Players").LocalPlayer.Name))
+
+-- Sürekli log penceresi güncelleme
+task.spawn(function()
+    while true do
+        task.wait(1)
+        -- LogDisplay label'ini güncelle (varsa)
+    end
 end)
